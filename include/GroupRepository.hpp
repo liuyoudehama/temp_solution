@@ -1,12 +1,12 @@
 #pragma once
 #include <pqxx/pqxx>
 #include <optional>
-#include "datatype.hpp"
+#include "datapoint.hpp"
 
-class InspectionGroupRepository
+class GroupRepository
 {
 public:
-    explicit InspectionGroupRepository(pqxx::connection &cx);
+    explicit GroupRepository(pqxx::connection &cx);
 
     bool create(int64_t id);
     std::optional<int64_t> read(int64_t id);

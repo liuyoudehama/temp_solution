@@ -1,6 +1,6 @@
-#include "InspectionRegionRepository.hpp"
+#include "PointRepository.hpp"
 
-InspectionRegionRepository::InspectionRegionRepository(pqxx::connection& cx) : cx_(cx) {
+PointRepository::PointRepository(pqxx::connection& cx) : cx_(cx) {
   cx_.prepare("region_insert",
               "INSERT INTO inspection_region (id, group_id, coord_x, coord_y, category) "
               "VALUES ($1, $2, $3, $4, $5)");
@@ -11,19 +11,19 @@ InspectionRegionRepository::InspectionRegionRepository(pqxx::connection& cx) : c
   cx_.prepare("region_delete", "DELETE FROM inspection_region WHERE id = $1");
 }
 
-bool InspectionRegionRepository::create(const InspectionRegion& region) {
+bool PointRepository::create(const datapoint& region) {
   pqxx::work tx{cx_};
   tx.exec_prepared("region_insert", region.id, region.group_id, region.coord_x, region.coord_y, region.category);
   tx.commit();
   return true;
 }
 
-std::optional<InspectionRegion> InspectionRegionRepository::read(int64_t id) {
+std::optional<datapoint> PointRepository::read(int64_t id) {
   pqxx::work tx{cx_};
   pqxx::result r = tx.exec_prepared("region_select", id);
-  std::optional<InspectionRegion> out;
+  std::optional<datapoint> out;
   if (!r.empty()) {
-    InspectionRegion reg;
+    datapoint reg;
     reg.id = r[0]["id"].as<int64_t>();
     reg.group_id = r[0]["group_id"].as<int64_t>();
     reg.coord_x = r[0]["coord_x"].as<float>();
@@ -35,7 +35,7 @@ std::optional<InspectionRegion> InspectionRegionRepository::read(int64_t id) {
   return out;
 }
 
-bool InspectionRegionRepository::update_coords(int64_t id, float x, float y) {
+bool PointRepository::update_coords(int64_t id, float x, float y) {
   pqxx::work tx{cx_};
   pqxx::result r = tx.exec_prepared("region_update_coords", x, y, id);
   bool ok = (r.affected_rows() == 1);
@@ -43,7 +43,7 @@ bool InspectionRegionRepository::update_coords(int64_t id, float x, float y) {
   return ok;
 }
 
-bool InspectionRegionRepository::update_category(int64_t id, int category) {
+bool PointRepository::update_category(int64_t id, int category) {
   pqxx::work tx{cx_};
   pqxx::result r = tx.exec_prepared("region_update_category", category, id);
   bool ok = (r.affected_rows() == 1);
@@ -51,13 +51,13 @@ bool InspectionRegionRepository::update_category(int64_t id, int category) {
   return ok;
 }
 
-std::vector<InspectionRegion> InspectionRegionRepository::list_by_group(int64_t group_id) {
+std::vector<datapoint> PointRepository::list_by_group(int64_t group_id) {
   pqxx::work tx{cx_};
   pqxx::result r = tx.exec_prepared("region_list_by_group", group_id);
-  std::vector<InspectionRegion> out;
+  std::vector<datapoint> out;
   out.reserve(r.size());
   for (auto const& row : r) {
-    InspectionRegion reg;
+    datapoint reg;
     reg.id = row["id"].as<int64_t>();
     reg.group_id = row["group_id"].as<int64_t>();
     reg.coord_x = row["coord_x"].as<float>();
@@ -69,7 +69,7 @@ std::vector<InspectionRegion> InspectionRegionRepository::list_by_group(int64_t 
   return out;
 }
 
-bool InspectionRegionRepository::remove(int64_t id) {
+bool PointRepository::remove(int64_t id) {
   pqxx::work tx{cx_};
   pqxx::result r = tx.exec_prepared("region_delete", id);
   bool ok = (r.affected_rows() == 1);

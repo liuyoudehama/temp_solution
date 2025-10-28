@@ -4,9 +4,11 @@
 #include <string>
 #include <pqxx/pqxx>
 #include <boost/program_options.hpp>
-#include "datatype.hpp"
-#include "InspectionRegionRepository.hpp"
-#include "InspectionGroupRepository.hpp"
+#include <cassert>
+
+#include "datapoint.hpp"
+#include "PointRepository.hpp"
+#include "GroupRepository.hpp"
 
 int main(int argc, char *argv[])
 {
@@ -17,6 +19,7 @@ int main(int argc, char *argv[])
     po::options_description desc("Options");
     desc.add_options()("data_directory", po::value<std::string>(&data_dir)->required(), "data directory path");
     po::variables_map vm;
+    
     try
     {
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -33,7 +36,10 @@ int main(int argc, char *argv[])
     std::string categories_file = data_dir + "/categories.txt";
     std::string groups_file = data_dir + "/groups.txt";
 
-    std::ifstream fin_points(points_file), fin_categories(categories_file), fin_groups(groups_file);
+    std::ifstream fin_points(points_file);
+    std::ifstream fin_categories(categories_file);
+    std::ifstream fin_groups(groups_file);
+
     if (!fin_points || !fin_categories || !fin_groups)
     {
         std::cerr << "Cannot open one or more data files in " << data_dir << "\n";
@@ -42,51 +48,53 @@ int main(int argc, char *argv[])
 
 
     // 2. read data from file
-    std::vector<InspectionRegion> regions;
-    std::vector<int64_t> group_ids;
-    std::string p_line, c_line, g_line;
-    while (std::getline(fin_points, p_line) &&
-           std::getline(fin_categories, c_line) &&
-           std::getline(fin_groups, g_line))
+    std::vector<datapoint> points;
+    std::set<int64_t> groups;
+
+    std::string line_point;
+    std::string line_categories;
+    std::string line_group;
+    
+    int point_id = 0;
+    while (std::getline(fin_points, line_point) &&
+           std::getline(fin_categories, line_categories) &&
+           std::getline(fin_groups, line_group))
     {
         double x = 0.0, y = 0.0;
-        sscanf(p_line.c_str(), "%lf %lf", &x, &y);
-        int category = static_cast<int>(std::stod(c_line));
-        int64_t group = static_cast<int64_t>(std::stod(g_line));
-        regions.emplace_back(0, group, static_cast<float>(x), static_cast<float>(y), category); // id自动递增（暂设0）
-        group_ids.push_back(group);
+        sscanf(line_point.c_str(), "%lf %lf", &x, &y);
+        int category = static_cast<int>(std::stod(line_categories));
+        int64_t group = static_cast<int64_t>(std::stod(line_group));
+        points.emplace_back(point_id, group, static_cast<float>(x), static_cast<float>(y), category); // id自动递增（暂设0）
+        groups.insert(group);
+        point_id++;
     }
+    
+    assert(fin_points.peek() == EOF);
+    assert(fin_categories.peek() == EOF);
+    assert(fin_groups.peek() == EOF);
+
     fin_points.close();
     fin_categories.close();
     fin_groups.close();
-    std::cout << "Loaded " << regions.size() << " regions.\n";
+    std::cout << "Loaded " << points.size() << " points.\n";
 
     //3. db transaction
-    std::string conn_str = "host=127.0.0.1 port=5432 dbname=postgres user=postgres";
+    std::string conn_str = "host=127.0.0.1 port=5432 dbname=solution_data user=postgres";
     try
     {
         pqxx::connection conn(conn_str);
+
+        GroupRepository group_repo(conn);
+        PointRepository region_repo(conn);
         
-        std::cout << "111111" << std::endl;
-
-        InspectionGroupRepository group_repo(conn);
-        InspectionRegionRepository region_repo(conn);
-        
-        std::cout << "222222" << std::endl;
-
-        // dedup group_ids
-        std::set<int64_t> unique_group_ids(group_ids.begin(), group_ids.end());
-
-        std::cout << "333333" << std::endl;
-
         // insert 
-        for (int64_t gid : unique_group_ids)
+        for (int64_t gid : groups)
         {
             std::cout << "insert: " << gid << std::endl;
             group_repo.create(gid);
         }
 
-        for (const auto &reg : regions)
+        for (const auto &reg : points)
         {
             std::cout << "insert: (" << reg.coord_x << "," << reg.coord_y << ")" << std::endl;
             region_repo.create(reg);
